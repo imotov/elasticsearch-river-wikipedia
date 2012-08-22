@@ -155,6 +155,9 @@ public class WikipediaRiver extends AbstractRiverComponent implements River {
         public void run() {
             try {
                 parser.parse();
+                if (currentRequest.numberOfActions() > 0) {
+                    processBulk();
+                }
                 logger.info("done processing stream");
                 if (closeOnCompletion) {
                     logger.info("deleting river");
@@ -180,6 +183,33 @@ public class WikipediaRiver extends AbstractRiverComponent implements River {
                 logger.error("failed to parse stream", e);
             }
         }
+    }
+
+    private void processBulk() {
+        try {
+            processingSemaphore.acquire();
+        } catch (InterruptedException ex) {
+            // Restore interrupted state
+            Thread.currentThread().interrupt();
+        }
+        try {
+            currentRequest.execute(new ActionListener<BulkResponse>() {
+                @Override
+                public void onResponse(BulkResponse bulkResponse) {
+                    processingSemaphore.release();
+                }
+
+                @Override
+                public void onFailure(Throwable e) {
+                    processingSemaphore.release();
+                    logger.warn("failed to execute bulk");
+                }
+            });
+        } catch (Exception e) {
+            logger.warn("failed to process bulk", e);
+            processingSemaphore.release();
+        }
+        currentRequest = client.prepareBulk();
     }
 
     private class PageCallback implements PageCallbackHandler {
@@ -223,37 +253,8 @@ public class WikipediaRiver extends AbstractRiverComponent implements River {
             } catch (Exception e) {
                 logger.warn("failed to construct index request", e);
             }
-            if (currentRequest.numberOfActions() > 0) {
-                processBulk();
-            }
         }
 
-        private void processBulk() {
-            try {
-                processingSemaphore.acquire();
-            } catch (InterruptedException ex) {
-                // Restore interrupted state
-                Thread.currentThread().interrupt();
-            }
-            try {
-                currentRequest.execute(new ActionListener<BulkResponse>() {
-                    @Override
-                    public void onResponse(BulkResponse bulkResponse) {
-                        processingSemaphore.release();
-                    }
-
-                    @Override
-                    public void onFailure(Throwable e) {
-                        processingSemaphore.release();
-                        logger.warn("failed to execute bulk");
-                    }
-                });
-            } catch (Exception e) {
-                logger.warn("failed to process bulk", e);
-                processingSemaphore.release();
-            }
-            currentRequest = client.prepareBulk();
-        }
     }
 
 
