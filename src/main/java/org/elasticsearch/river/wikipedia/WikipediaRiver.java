@@ -174,10 +174,9 @@ public class WikipediaRiver extends AbstractRiverComponent implements River {
                         logger.error("failed to delete river", e);
                     }
                 }
-            } catch (Exception e) {
-                if (closed) {
-                    return;
-                }
+            } catch (WikipediaRiverClosedException e) {
+                return;
+            }  catch (Exception e) {
                 logger.error("failed to parse stream", e);
             }
         }
@@ -188,7 +187,7 @@ public class WikipediaRiver extends AbstractRiverComponent implements River {
         @Override
         public void process(WikiPage page) {
             if (closed) {
-                return;
+                throw new WikipediaRiverClosedException("Wikipedia river is closed");
             }
             String title = stripTitle(page.getTitle());
             if (logger.isTraceEnabled()) {
